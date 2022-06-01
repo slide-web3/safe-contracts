@@ -1,12 +1,13 @@
+import type { HardhatUserConfig, HttpNetworkUserConfig } from "hardhat/types";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "solidity-coverage";
 import "hardhat-deploy";
 import dotenv from "dotenv";
-import type { HardhatUserConfig, HttpNetworkUserConfig } from "hardhat/types";
 import yargs from "yargs";
 import { Signer } from "@ethersproject/abstract-signer";
 import { task } from "hardhat/config";
+import { getSingletonFactoryInfo } from "@slide-web3/safe-singleton-factory";
 
 const argv = yargs
   .option("network", {
@@ -18,7 +19,7 @@ const argv = yargs
 
 // Load environment variables.
 dotenv.config();
-const { NODE_URL, INFURA_KEY, MNEMONIC, ETHERSCAN_API_KEY, PK, SOLIDITY_VERSION, SOLIDITY_SETTINGS } = process.env;
+const { NODE_URL, INFURA_KEY, MNEMONIC, ETHERSCAN_API_KEY, PK, SOLIDITY_VERSION, SOLIDITY_SETTINGS, CUSTOM_DETERMINISTIC_DEPLOYMENT } = process.env;
 
 const DEFAULT_MNEMONIC =
   "candy maple cake sugar pudding cream honey rich smooth crumble sweet treat";
@@ -41,6 +42,7 @@ if (["mainnet", "rinkeby", "kovan", "goerli", "ropsten", "mumbai", "polygon"].in
 import "./src/tasks/local_verify"
 import "./src/tasks/deploy_contracts"
 import "./src/tasks/show_codesize"
+import { BigNumber } from "@ethersproject/bignumber";
 
 task("accounts", "Prints the list of accounts", async (_taskArgs, hre) => {
   const signers: Signer[] = await hre.ethers.getSigners();
@@ -52,6 +54,18 @@ task("accounts", "Prints the list of accounts", async (_taskArgs, hre) => {
 
 const primarySolidityVersion = SOLIDITY_VERSION || "0.7.6"
 const soliditySettings = !!SOLIDITY_SETTINGS ? JSON.parse(SOLIDITY_SETTINGS) : undefined
+
+const deterministicDeployment = CUSTOM_DETERMINISTIC_DEPLOYMENT == "true" ?
+  (network: string) => {
+    const info = getSingletonFactoryInfo(parseInt(network))
+    if (!info) return undefined
+    return {
+      factory: info.address,
+      deployer: info.signerAddress,
+      funding: BigNumber.from(info.gasLimit).mul(BigNumber.from(info.gasPrice)).toString(),
+      signedTx: info.transaction
+    }
+  } : undefined
 
 const userConfig: HardhatUserConfig = {
   paths: {
@@ -113,7 +127,24 @@ const userConfig: HardhatUserConfig = {
       ...sharedNetworkConfig,
       url: `https://volta-rpc.energyweb.org`,
     },
+    bsc: {
+      ...sharedNetworkConfig,
+      url: `https://bsc-dataseed.binance.org/`,
+    },
+    arbitrum: {
+      ...sharedNetworkConfig,
+      url: `https://arb1.arbitrum.io/rpc`,
+    },
+    fantomTestnet: {
+      ...sharedNetworkConfig,
+      url: `https://rpc.testnet.fantom.network/`,
+    },
+    avalanche: {
+      ...sharedNetworkConfig,
+      url: `https://api.avax.network/ext/bc/C/rpc`,
+    },
   },
+  deterministicDeployment,
   namedAccounts: {
     deployer: 0,
   },
