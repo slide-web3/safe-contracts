@@ -5,6 +5,8 @@ import "hardhat-deploy";
 import dotenv from "dotenv";
 import type { HardhatUserConfig, HttpNetworkUserConfig } from "hardhat/types";
 import yargs from "yargs";
+import { Signer } from "@ethersproject/abstract-signer";
+import { task } from "hardhat/config";
 
 const argv = yargs
   .option("network", {
@@ -39,6 +41,14 @@ if (["mainnet", "rinkeby", "kovan", "goerli", "ropsten", "mumbai", "polygon"].in
 import "./src/tasks/local_verify"
 import "./src/tasks/deploy_contracts"
 import "./src/tasks/show_codesize"
+
+task("accounts", "Prints the list of accounts", async (_taskArgs, hre) => {
+  const signers: Signer[] = await hre.ethers.getSigners();
+  const addresses = await Promise.all(signers.map(signer => signer.getAddress()));
+
+  // eslint-disable-next-line no-console
+  console.log(addresses);
+});
 
 const primarySolidityVersion = SOLIDITY_VERSION || "0.7.6"
 const soliditySettings = !!SOLIDITY_SETTINGS ? JSON.parse(SOLIDITY_SETTINGS) : undefined
