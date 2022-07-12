@@ -48,7 +48,7 @@ contract GnosisSafe is
     event ExecutionFailure(bytes32 txHash, uint256 payment);
     event ExecutionSuccess(bytes32 txHash, uint256 payment);
 
-    mapping(bytes32 => bool) public usedNonces;
+    uint256 public nonce;
     bytes32 private _deprecatedDomainSeparator;
     // Mapping to keep track of all message hashes that have been approved by ALL REQUIRED owners
     mapping(bytes32 => uint256) public signedMessages;
@@ -108,7 +108,6 @@ contract GnosisSafe is
     /// @param gasToken Token address (or 0 if ETH) that is used for the payment.
     /// @param refundReceiver Address of receiver of gas payment (or 0 if tx.origin).
     /// @param signatures Packed signature data ({bytes32 r}{bytes32 s}{uint8 v})
-    /// @param nonce unique random nonce
     function execTransaction(
         address to,
         uint256 value,
@@ -119,13 +118,11 @@ contract GnosisSafe is
         uint256 gasPrice,
         address gasToken,
         address payable refundReceiver,
-        bytes memory signatures,
-        bytes32 nonce
+        bytes memory signatures
     ) public payable virtual returns (bool success) {
         bytes32 txHash;
         // Use scope here to limit variable lifetime and prevent `stack too deep` errors
         {
-            require(!usedNonces[nonce], "Nonce already used");
             bytes memory txHashData =
                 encodeTransactionData(
                     // Transaction info
@@ -142,13 +139,32 @@ contract GnosisSafe is
                     // Signature info
                     nonce
                 );
-            // mark nonce as used and execute transaction.
-            usedNonces[nonce] = true;
+            // Increase nonce and execute transaction.
+            nonce++;
             txHash = keccak256(txHashData);
             checkSignatures(txHash, txHashData, signatures);
         }
-        // Ripped out transaction guard because the extra variable on the stack was causing the stack too deep error
-
+        address guard = getGuard();
+        {
+            if (guard != address(0)) {
+                Guard(guard).checkTransaction(
+                    // Transaction info
+                    to,
+                    value,
+                    data,
+                    operation,
+                    safeTxGas,
+                    // Payment info
+                    baseGas,
+                    gasPrice,
+                    gasToken,
+                    refundReceiver,
+                    // Signature info
+                    signatures,
+                    msg.sender
+                );
+            }
+        }
         // We require some gas to emit the events (at least 2500) after the execution and some to perform code until the execution (500)
         // We also include the 1/64 in the check that is not send along with a call to counteract potential shortings because of EIP-150
         require(gasleft() >= ((safeTxGas * 64) / 63).max(safeTxGas + 2500) + 500, "GS010");
@@ -169,6 +185,11 @@ contract GnosisSafe is
             }
             if (success) emit ExecutionSuccess(txHash, payment);
             else emit ExecutionFailure(txHash, payment);
+        }
+        {
+            if (guard != address(0)) {
+                Guard(guard).checkAfterExecution(txHash, success);
+            }
         }
     }
 
@@ -351,7 +372,7 @@ contract GnosisSafe is
         uint256 gasPrice,
         address gasToken,
         address refundReceiver,
-        bytes32 _nonce
+        uint256 _nonce
     ) public view returns (bytes memory) {
         bytes32 safeTxHash =
             keccak256(
@@ -394,7 +415,7 @@ contract GnosisSafe is
         uint256 gasPrice,
         address gasToken,
         address refundReceiver,
-        bytes32 _nonce
+        uint256 _nonce
     ) public view returns (bytes32) {
         return keccak256(encodeTransactionData(to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, _nonce));
     }
