@@ -37,6 +37,7 @@ contract GnosisSafeL2 is GnosisSafe {
     /// @param gasToken Token address (or 0 if ETH) that is used for the payment.
     /// @param refundReceiver Address of receiver of gas payment (or 0 if tx.origin).
     /// @param signatures Packed signature data ({bytes32 r}{bytes32 s}{uint8 v})
+    /// @param nonce unique random nonce
     function execTransaction(
         address to,
         uint256 value,
@@ -47,7 +48,8 @@ contract GnosisSafeL2 is GnosisSafe {
         uint256 gasPrice,
         address gasToken,
         address payable refundReceiver,
-        bytes memory signatures
+        bytes memory signatures,
+        bytes32 nonce
     ) public payable override returns (bool) {
         bytes memory additionalInfo;
         {
@@ -66,7 +68,7 @@ contract GnosisSafeL2 is GnosisSafe {
             signatures,
             additionalInfo
         );
-        return super.execTransaction(to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, signatures);
+        return super.execTransaction(to, value, data, operation, safeTxGas, baseGas, gasPrice, gasToken, refundReceiver, signatures, nonce);
     }
 
     /// @dev Allows a Module to execute a Safe transaction without any further confirmations.
